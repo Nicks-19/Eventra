@@ -70,7 +70,9 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     isMountedRef.current = true;
-    return () => { isMountedRef.current = false; };
+    return () => {
+      isMountedRef.current = false;
+    };
   }, []);
 
   const clearSession = useCallback(() => {
@@ -78,7 +80,8 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setToken(null);
     setAuthToken(null);
-    document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; Secure; SameSite=Strict";
+    document.cookie =
+      "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; Secure; SameSite=Strict";
     syncSecureStorage.removeItem("user");
     return true;
   }, []);
@@ -117,14 +120,16 @@ export const AuthProvider = ({ children }) => {
           clearSession();
         } else {
           try {
-            const cachedUser = syncSecureStorage.getItem("user");
+            const cachedUser = await syncSecureStorage.getItemAsync("user");
             if (cachedUser) {
               setUser(JSON.parse(cachedUser));
               setToken("cookie-managed");
             } else {
               clearSession();
             }
-          } catch { clearSession(); }
+          } catch {
+            clearSession();
+          }
         }
       } finally {
         if (isMountedRef.current) setLoading(false);
@@ -134,7 +139,9 @@ export const AuthProvider = ({ children }) => {
   }, [clearSession]);
 
   const clearExpiredSessionRef = useRef(clearExpiredSession);
-  useEffect(() => { clearExpiredSessionRef.current = clearExpiredSession; }, [clearExpiredSession]);
+  useEffect(() => {
+    clearExpiredSessionRef.current = clearExpiredSession;
+  }, [clearExpiredSession]);
   useEffect(() => {
     setOnUnauthorizedHandler(() => clearExpiredSessionRef.current());
     return () => setOnUnauthorizedHandler(null);
@@ -146,12 +153,21 @@ export const AuthProvider = ({ children }) => {
     const expSeconds = token === "cookie-managed" ? user?.exp : decodeTokenPayload(token)?.exp;
     let id;
     if (typeof expSeconds === "number") {
-      id = setTimeout(() => { clearExpiredSession(); },
-        Math.max(expSeconds * 1000 - Date.now() + 1000, 0));
+      id = setTimeout(
+        () => {
+          clearExpiredSession();
+        },
+        Math.max(expSeconds * 1000 - Date.now() + 1000, 0)
+      );
     } else if (token !== "cookie-managed") {
-      id = setInterval(() => { if (!isTokenValid(token)) clearExpiredSession(); }, 60_000);
+      id = setInterval(() => {
+        if (!isTokenValid(token)) clearExpiredSession();
+      }, 60_000);
     }
-    return () => { if (typeof expSeconds === "number") clearTimeout(id); else if (id) clearInterval(id); };
+    return () => {
+      if (typeof expSeconds === "number") clearTimeout(id);
+      else if (id) clearInterval(id);
+    };
   }, [token, user?.exp, clearExpiredSession]);
 
   const persistSession = useCallback(async (_, sessionUser) => {
@@ -173,24 +189,31 @@ export const AuthProvider = ({ children }) => {
     error?.message ||
     fallbackMessage;
 
-  const login = useCallback(async (usernameOrEmail, password) => {
-    if (!isMountedRef.current) return false;
-    setAuthRequest({ loading: true, error: null });
-    try {
-      const res = await authService.login({ usernameOrEmail, password });
-      const data = res.data;
-      if (res.status !== 200) throw new Error(data?.message || data?.error || "Invalid credentials");
-      const { sessionUser } = extractSession(data, usernameOrEmail);
-      const persisted = await persistSession("cookie-managed", sessionUser);
-      if (!persisted) return false;
-      setAuthRequest({ loading: false, error: null });
-      return true;
-    } catch (error) {
+  const login = useCallback(
+    async (usernameOrEmail, password) => {
       if (!isMountedRef.current) return false;
-      setAuthRequest({ loading: false, error: getAuthErrorMessage(error, "Login failed. Please try again.") });
-      return false;
-    }
-  }, [persistSession]);
+      setAuthRequest({ loading: true, error: null });
+      try {
+        const res = await authService.login({ usernameOrEmail, password });
+        const data = res.data;
+        if (res.status !== 200)
+          throw new Error(data?.message || data?.error || "Invalid credentials");
+        const { sessionUser } = extractSession(data, usernameOrEmail);
+        const persisted = await persistSession("cookie-managed", sessionUser);
+        if (!persisted) return false;
+        setAuthRequest({ loading: false, error: null });
+        return true;
+      } catch (error) {
+        if (!isMountedRef.current) return false;
+        setAuthRequest({
+          loading: false,
+          error: getAuthErrorMessage(error, "Login failed. Please try again."),
+        });
+        return false;
+      }
+    },
+    [persistSession]
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -204,7 +227,7 @@ export const AuthProvider = ({ children }) => {
 
   const isAuthenticated = useCallback(() => {
     if (!user || !token) return false;
-    
+
     if (token === "cookie-managed") {
       if (typeof user.exp === "number" && Date.now() >= user.exp * 1000) {
         clearExpiredSession();
@@ -217,19 +240,28 @@ export const AuthProvider = ({ children }) => {
     return true;
   }, [user, token, clearExpiredSession]);
 
-  const hasRole = useCallback((roleName) => {
-    if (!user?.roles) return false;
-    const targetRole = String(roleName).toUpperCase();
-    return normalizeRoles(user.roles).includes(targetRole);
-  }, [user]);
+  const hasRole = useCallback(
+    (roleName) => {
+      if (!user?.roles) return false;
+      const targetRole = String(roleName).toUpperCase();
+      return normalizeRoles(user.roles).includes(targetRole);
+    },
+    [user]
+  );
 
-  const hasPermission = useCallback((permissionName) => {
-    if (!user?.permissions) return false;
-    return user.permissions.includes(permissionName);
-  }, [user]);
+  const hasPermission = useCallback(
+    (permissionName) => {
+      if (!user?.permissions) return false;
+      return user.permissions.includes(permissionName);
+    },
+    [user]
+  );
 
   const hasAnyRole = useCallback((...roleNames) => roleNames.some((r) => hasRole(r)), [hasRole]);
-  const hasAnyPermission = useCallback((...ps) => ps.some((p) => hasPermission(p)), [hasPermission]);
+  const hasAnyPermission = useCallback(
+    (...ps) => ps.some((p) => hasPermission(p)),
+    [hasPermission]
+  );
 
   const isAdmin = () => hasRole(ROLES.ADMIN);
   const isEventManager = () => hasRole(ROLES.ORGANIZER);
@@ -238,15 +270,47 @@ export const AuthProvider = ({ children }) => {
   const isVolunteer = () => hasRole(ROLES.VOLUNTEER);
   const isAttendee = () => hasRole(ROLES.ATTENDEE);
 
-  const value = useMemo(() => ({
-    user, token, loading, authRequest, login, logout, setUser,
-    isAuthenticated, hasRole, hasPermission, hasAnyRole, hasAnyPermission,
-    isAdmin, isEventManager, isSuperAdmin, isOrganizer, isVolunteer, isAttendee,
-  }), [
-    user, token, loading, authRequest, login, logout,
-    isAuthenticated, hasRole, hasPermission, hasAnyRole, hasAnyPermission,
-    isAdmin, isEventManager, isSuperAdmin, isOrganizer, isVolunteer, isAttendee,
-  ]);
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      loading,
+      authRequest,
+      login,
+      logout,
+      setUser,
+      isAuthenticated,
+      hasRole,
+      hasPermission,
+      hasAnyRole,
+      hasAnyPermission,
+      isAdmin,
+      isEventManager,
+      isSuperAdmin,
+      isOrganizer,
+      isVolunteer,
+      isAttendee,
+    }),
+    [
+      user,
+      token,
+      loading,
+      authRequest,
+      login,
+      logout,
+      isAuthenticated,
+      hasRole,
+      hasPermission,
+      hasAnyRole,
+      hasAnyPermission,
+      isAdmin,
+      isEventManager,
+      isSuperAdmin,
+      isOrganizer,
+      isVolunteer,
+      isAttendee,
+    ]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
